@@ -81,6 +81,13 @@ export default function StacksScreen() {
                 <Text style={s.wantName}>Want list</Text>
               </View>
               <Text style={s.wantCount}>{wantList.itemCount || 0} items</Text>
+              <TouchableOpacity
+                style={s.shareBtn}
+                onPress={e => { e.stopPropagation(); router.push({ pathname: '/share', params: { id: 'want-list' } }); }}
+                activeOpacity={0.8}
+              >
+                <Text style={s.shareBtnText}>↗ Share</Text>
+              </TouchableOpacity>
             </View>
             <View style={s.wantThumbs}>
               {Array(5).fill(null).map((_, i) => (
@@ -107,7 +114,16 @@ export default function StacksScreen() {
                   <Text style={s.stackEmoji}>{stack.emoji}</Text>
                   <Text style={s.stackName}>{stack.name}</Text>
                 </View>
-                <Text style={s.stackCount}>{stack.itemCount || 0} items →</Text>
+                <View style={s.stackCardRight}>
+                  <Text style={s.stackCount}>{stack.itemCount || 0}</Text>
+                  <TouchableOpacity
+                    style={s.shareBtn}
+                    onPress={e => { e.stopPropagation(); router.push({ pathname: '/share', params: { id: stack.id } }); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={s.shareBtnText}>↗ Share</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={s.thumbRow}>
                 {Array(4).fill(null).map((_, i) => (
@@ -199,6 +215,11 @@ const s = StyleSheet.create({
   stackCount:   { fontFamily: 'Geist-Regular', fontSize: 12, color: colors.ink3 },
   thumbRow:     { flexDirection: 'row', gap: 2, height: 72 },
   thumbCell:    { flex: 1, overflow: 'hidden', backgroundColor: colors.cream2 },
+  shareBtn: { backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 4, paddingHorizontal: 10 },
+  shareBtnText: { fontFamily: 'Geist-Medium', fontSize: 11, color: colors.ink2 },
+  stackCardRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  shareBtn:   { backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 5, paddingHorizontal: 10 },
+  shareBtnText: { fontFamily: 'Geist-Medium', fontSize: 11, color: colors.ink2 },
   createPrompt: { margin: 24, padding: 24, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', alignItems: 'center', gap: 8 },
   createPromptTitle: { fontFamily: 'InstrumentSerif-Regular', fontSize: 20, color: colors.ink },
   createPromptBody:  { fontFamily: 'Geist-Regular', fontSize: 14, color: colors.ink2, textAlign: 'center', lineHeight: 20 },

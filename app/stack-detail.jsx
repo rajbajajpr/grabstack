@@ -137,9 +137,18 @@ export default function StackDetailScreen() {
           <Text style={s.back}>← Back</Text>
         </TouchableOpacity>
         <Text style={s.stackTitle} numberOfLines={1}>{stack?.emoji} {stack?.name}</Text>
-        <TouchableOpacity onPress={() => setEditOpen(true)} style={s.editBtn} activeOpacity={0.7}>
-          <Text style={s.editBtnText}>Edit</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <TouchableOpacity
+            style={s.shareBtn}
+            onPress={() => router.push({ pathname: '/share', params: { id } })}
+            activeOpacity={0.8}
+          >
+            <Text style={s.shareBtnText}>↗</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setEditOpen(true)} style={s.editBtn} activeOpacity={0.7}>
+            <Text style={s.editBtnText}>Edit</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Text style={s.itemCount}>{stack?.itemCount ?? items.length} screenshots</Text>
@@ -249,6 +258,8 @@ const s = StyleSheet.create({
   nav:       { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back:      { fontFamily: 'Geist-Medium', fontSize: 16, color: colors.gold },
   stackTitle:{ fontFamily: 'InstrumentSerif-Regular', fontSize: 20, color: colors.ink, flex: 1, textAlign: 'center' },
+  shareBtn:   { backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border2, width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  shareBtnText: { fontFamily: 'Geist-Medium', fontSize: 16, color: colors.ink },
   editBtn:   { backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border2, paddingVertical: 7, paddingHorizontal: 14 },
   editBtnText:{ fontFamily: 'Geist-Medium', fontSize: 13, color: colors.ink },
   itemCount: { fontFamily: 'Geist-Regular', fontSize: 12, color: colors.ink3, textAlign: 'center', marginBottom: 8 },

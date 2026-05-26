@@ -1,8 +1,8 @@
 // app/preview.jsx
 import { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Share, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, Share,
+  ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -11,6 +11,8 @@ import {
   getAllStacksWithCounts, addToStack, removeFromStack,
   getStacksForScreenshot, upsertScreenshot, setWantList,
 } from '../services/database';
+import * as FileSystem from 'expo-file-system/legacy';
+import RNShare from 'react-native-share';
 import { getShot } from '../services/shotCache';
 import { colors, radius } from '../constants/theme';
 
@@ -31,21 +33,17 @@ export default function PreviewScreen() {
   useEffect(() => {
     async function load() {
       try {
-        // Read from cache — must be inside useEffect so module is ready
         const cached = getShot(shotId);
         if (cached?.uri) setUri(cached.uri);
         const lid = cached?.localIdentifier || shotId.replace('ss-', '');
         setLocalIdentifier(lid);
         if (cached?.capturedAt) capturedAtRef.current = cached.capturedAt;
-
-        // Save to DB
         await upsertScreenshot({
           id: shotId,
           localIdentifier: lid,
           capturedAt: cached?.capturedAt || Date.now(),
           filename: cached?.filename || null,
         });
-
         const [allStacks, shotStacks] = await Promise.all([
           getAllStacksWithCounts(),
           getStacksForScreenshot(shotId),
@@ -70,26 +68,14 @@ export default function PreviewScreen() {
         await addToStack(stackId, shotId);
         setInStacks(prev => [...prev, stackId]);
         setLastAdded(stackName);
-        setTimeout(() => { try { router.back(); } catch { router.replace("/(tabs)"); } }, 1200);
+        setTimeout(() => { try { router.back(); } catch { router.replace('/(tabs)'); } }, 1200);
       }
     } catch (e) {
       console.error('toggleStack:', e);
     }
   }
 
-  async function handleShare() {
-    try {
-      if (uri) {
-        // Share the actual image file on Android
-        await Share.share({
-          url: uri,
-          message: 'Shared from GrabStack',
-        });
-      } else {
-        await Share.share({ message: 'Shared from GrabStack' });
-      }
-    } catch (e) { console.error(e); }
-  }
+  async function toggleWant() {
     try {
       const next = !inWant;
       setInWant(next);
@@ -97,6 +83,30 @@ export default function PreviewScreen() {
     } catch (e) {
       console.error('toggleWant:', e);
       setInWant(v => !v);
+    }
+  }
+
+  async function handleShare() {
+    try {
+      if (!uri) {
+        await Share.share({ message: 'Shared from GrabStack' });
+        return;
+      }
+      // Copy to app cache directory so react-native-share can access it
+      const filename = `grabstack_share_${Date.now()}.jpg`;
+      const destUri = FileSystem.cacheDirectory + filename;
+      await FileSystem.copyAsync({ from: uri, to: destUri });
+      await RNShare.open({
+        url: destUri,
+        type: 'image/jpeg',
+        failOnCancel: false,
+      });
+    } catch (e) {
+      if (!String(e).includes('cancel') && !String(e).includes('dismissed')) {
+        console.error('Share error:', e);
+        // Fallback to text share
+        await Share.share({ message: 'Shared from GrabStack' });
+      }
     }
   }
 
@@ -122,12 +132,7 @@ export default function PreviewScreen() {
 
       <View style={s.imgArea}>
         {uri ? (
-          <Image
-            source={{ uri }}
-            style={s.imgCard}
-            contentFit="contain"
-
-          />
+          <Image source={{ uri }} style={s.imgCard} contentFit="contain" />
         ) : (
           <View style={[s.imgCard, s.imgPlaceholder]}>
             <Text style={{ fontSize: 44 }}>📷</Text>
@@ -173,21 +178,21 @@ export default function PreviewScreen() {
 }
 
 const s = StyleSheet.create({
-  safe:    { flex: 1, backgroundColor: colors.cream },
-  nav:     { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  back:    { fontFamily: 'Geist-Medium', fontSize: 16, color: colors.gold },
-  acts:    { flexDirection: 'row', gap: 20 },
-  actIcon: { fontSize: 24 },
-  imgArea: { flex: 1, padding: 12, paddingBottom: 8 },
-  imgCard: { width: '100%', height: '100%', borderRadius: radius.lg, backgroundColor: colors.cream2, overflow: 'hidden' },
+  safe:        { flex: 1, backgroundColor: colors.cream },
+  nav:         { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  back:        { fontFamily: 'Geist-Medium', fontSize: 16, color: colors.gold },
+  acts:        { flexDirection: 'row', gap: 20 },
+  actIcon:     { fontSize: 24 },
+  imgArea:     { flex: 1, padding: 12, paddingBottom: 8 },
+  imgCard:     { width: '100%', height: '100%', borderRadius: radius.lg, backgroundColor: colors.cream2, overflow: 'hidden' },
   imgPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   successBanner: { marginHorizontal: 24, marginBottom: 8, backgroundColor: colors.greenBg, borderRadius: radius.pill, paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(45,106,79,0.2)' },
-  successText: { fontFamily: 'Geist-Medium', fontSize: 13, color: colors.green },
-  sheet:    { paddingHorizontal: 24, paddingTop: 14, paddingBottom: 20, borderTopWidth: 1, borderColor: colors.border },
-  sheetLabel: { fontFamily: 'Geist-SemiBold', fontSize: 11, color: colors.ink3, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
-  noStacks: { fontFamily: 'Geist-Regular', fontSize: 13, color: colors.ink2 },
-  stackBtn:     { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border2, paddingVertical: 10, paddingHorizontal: 16 },
-  stackBtnOn:   { backgroundColor: colors.ink, borderColor: colors.ink },
-  stackBtnText: { fontFamily: 'Geist-Regular', fontSize: 14, color: colors.ink },
-  stackBtnTextOn: { color: colors.cream },
+  successText:   { fontFamily: 'Geist-Medium', fontSize: 13, color: colors.green },
+  sheet:       { paddingHorizontal: 24, paddingTop: 14, paddingBottom: 20, borderTopWidth: 1, borderColor: colors.border },
+  sheetLabel:  { fontFamily: 'Geist-SemiBold', fontSize: 11, color: colors.ink3, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
+  noStacks:    { fontFamily: 'Geist-Regular', fontSize: 13, color: colors.ink2 },
+  stackBtn:    { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border2, paddingVertical: 10, paddingHorizontal: 16 },
+  stackBtnOn:  { backgroundColor: colors.ink, borderColor: colors.ink },
+  stackBtnText:    { fontFamily: 'Geist-Regular', fontSize: 14, color: colors.ink },
+  stackBtnTextOn:  { color: colors.cream },
 });
