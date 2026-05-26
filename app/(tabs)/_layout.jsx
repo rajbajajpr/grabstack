@@ -1,12 +1,12 @@
 // app/(tabs)/_layout.jsx
 import { Tabs } from 'expo-router';
-import { Platform, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/theme';
 
 function TabIcon({ label, glyph, focused }) {
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 6, width: 72 }}>
+    <View style={{ alignItems: 'center', justifyContent: 'center', width: 72, paddingTop: 8 }}>
       <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.28, lineHeight: 24 }}>{glyph}</Text>
       <Text
         numberOfLines={1}
@@ -15,7 +15,7 @@ function TabIcon({ label, glyph, focused }) {
           fontFamily: 'Geist-Medium',
           color: focused ? colors.gold : colors.ink3,
           letterSpacing: 0.1,
-          marginTop: 3,
+          marginTop: 4,
           width: 72,
           textAlign: 'center',
         }}
@@ -26,7 +26,9 @@ function TabIcon({ label, glyph, focused }) {
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  const tabBarHeight = 54 + insets.bottom;
+  // Give generous room above Samsung nav buttons
+  const extraPad = Math.max(insets.bottom, 16);
+  const tabBarHeight = 62 + extraPad;
 
   return (
     <Tabs
@@ -37,8 +39,8 @@ export default function TabLayout() {
           borderTopColor: colors.border,
           borderTopWidth: 1,
           height: tabBarHeight,
-          paddingBottom: insets.bottom,
-          paddingTop: 8,
+          paddingBottom: extraPad,
+          paddingTop: 6,
         },
         tabBarShowLabel: false,
       }}

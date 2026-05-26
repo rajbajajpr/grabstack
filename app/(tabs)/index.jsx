@@ -1,263 +1,459 @@
 // app/(tabs)/index.jsx
 import { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ScrollView, Dimensions, RefreshControl, Image,
+  View, Text, StyleSheet, SectionList, TouchableOpacity,
+  ScrollView, Dimensions, RefreshControl, Image, Modal, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
-import { getAllStacksWithCounts, getSetting, upsertScreenshot } from '../../services/database';
-import { colors, spacing, radius, fontSize } from '../../constants/theme';
+import { getAllStacksWithCounts, getSetting, getStackItems, addToStack, upsertScreenshot } from '../../services/database';
+import { storeShot, clearOld } from '../../services/shotCache';
+import { colors, radius } from '../../constants/theme';
 
 const SCREEN_W = Dimensions.get('window').width;
-const GRID_PAD = 20;
-const GRID_GAP = 3;
+const GRID_PAD = 16;
+const GRID_GAP = 8;
 const CELL_W = (SCREEN_W - GRID_PAD * 2 - GRID_GAP * 2) / 3;
 const CELL_H = CELL_W * (17 / 9);
 const FREE_LIMIT = 100;
 
-const CATS = {
-  shopping:{ label:'Shopping', bg:'#FFF8F0', accent:'#CC8844' },
-  food:    { label:'Food',     bg:'#F0FFF4', accent:'#338844' },
-  ticket:  { label:'Travel',   bg:'#F0F4FF', accent:'#3355CC' },
-  quote:   { label:'Quote',    bg:'#F8F8F8', accent:'#666666' },
-  social:  { label:'Social',   bg:'#FFF0F8', accent:'#CC3388' },
-  work:    { label:'Work',     bg:'#F0FFFE', accent:'#336677' },
-};
-
-function ScreenshotCell({ shot, onPress }) {
+function ScreenshotCell({ shot, assignedStacks, selected, onPress, onLongPress }) {
+  const isAssigned = assignedStacks && assignedStacks.length > 0;
   return (
-    <TouchableOpacity style={styles.cell} onPress={() => onPress(shot)} activeOpacity={0.82}>
-      {shot.uri ? (
-        <Image source={{ uri: shot.uri }} style={styles.cellImg} resizeMode="cover" />
-      ) : (
-        <View style={[styles.cellImg, { backgroundColor: colors.cream2, alignItems: 'center', justifyContent: 'center' }]}>
-          <Text style={{ fontSize: 22 }}>📷</Text>
+    <TouchableOpacity
+      style={[styles.cell, selected && styles.cellSelected]}
+      onPress={() => onPress(shot)}
+      onLongPress={() => onLongPress(shot)}
+      activeOpacity={0.82}
+      delayLongPress={400}
+    >
+      <Image source={{ uri: shot.uri }} style={styles.cellImg} resizeMode="cover" />
+      {selected && (
+        <View style={styles.selectOverlay}>
+          <View style={styles.selectCheck}>
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>✓</Text>
+          </View>
         </View>
       )}
-      {shot.inWantList ? <Text style={styles.heartPin}>❤️</Text> : null}
+      {isAssigned && !selected && (
+        <View style={styles.assignedBadge}>
+          <Text style={{ fontSize: 11 }}>{assignedStacks[0].emoji}</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
+}
+
+// Render 3 cells per row
+function RowItem({ shots, stackContents, selected, onPress, onLongPress }) {
+  return (
+    <View style={styles.gridRow}>
+      {shots.map(shot => (
+        <ScreenshotCell
+          key={shot.id}
+          shot={shot}
+          assignedStacks={stackContents[shot.id]}
+          selected={selected.has(shot.id)}
+          onPress={onPress}
+          onLongPress={onLongPress}
+        />
+      ))}
+      {shots.length === 2 && <View style={[styles.cell, { backgroundColor: 'transparent' }]} />}
+      {shots.length === 1 && (
+        <>
+          <View style={[styles.cell, { backgroundColor: 'transparent' }]} />
+          <View style={[styles.cell, { backgroundColor: 'transparent' }]} />
+        </>
+      )}
+    </View>
+  );
+}
+
+function chunkIntoRows(arr) {
+  const rows = [];
+  for (let i = 0; i < arr.length; i += 3) rows.push(arr.slice(i, i + 3));
+  return rows;
 }
 
 export default function HomeScreen() {
   const router = useRouter();
   const [shots, setShots] = useState([]);
   const [stacks, setStacks] = useState([]);
+  const [stackContents, setStackContents] = useState({});
   const [filter, setFilter] = useState('all');
   const [isPremium, setIsPremium] = useState(false);
-  const [totalOnDevice, setTotalOnDevice] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [showNudge, setShowNudge] = useState(true);
-  const [permissionStatus, setPermissionStatus] = useState(null);
+  const [dateFilter, setDateFilter] = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selected, setSelected] = useState(new Set());
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   async function loadScreenshots() {
-    // Request permission
-    const { status } = await MediaLibrary.requestPermissionsAsync();
-    setPermissionStatus(status);
+    const { status } = await MediaLibrary.requestPermissionsAsync(true);
     if (status !== 'granted') return [];
-
-    // Get screenshots album
     const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
-    const screenshotAlbum = albums.find(a =>
-      a.title === 'Screenshots' || a.title === 'Screenshot'
-    );
-
+    const screenshotAlbum = albums.find(a => a.title === 'Screenshots' || a.title === 'Screenshot');
     let assets = [];
     if (screenshotAlbum) {
-      const result = await MediaLibrary.getAssetsAsync({
-        album: screenshotAlbum,
-        mediaType: 'photo',
-        sortBy: [['creationTime', false]],
-        first: FREE_LIMIT,
-      });
-      assets = result.assets;
+      const r = await MediaLibrary.getAssetsAsync({ album: screenshotAlbum, mediaType: 'photo', sortBy: [['creationTime', false]], first: FREE_LIMIT });
+      assets = r.assets;
     } else {
-      // Fallback: recent photos
-      const result = await MediaLibrary.getAssetsAsync({
-        mediaType: 'photo',
-        sortBy: [['creationTime', false]],
-        first: FREE_LIMIT,
-      });
-      assets = result.assets;
+      const r = await MediaLibrary.getAssetsAsync({ mediaType: 'photo', sortBy: [['creationTime', false]], first: FREE_LIMIT });
+      assets = r.assets;
     }
-
-    // Get full asset info for URIs
-    const withUris = await Promise.all(
-      assets.map(async (asset) => {
-        const info = await MediaLibrary.getAssetInfoAsync(asset.id);
-        return {
-          id: 'ss-' + asset.id,
-          localIdentifier: asset.id,
-          uri: info.localUri || info.uri,
-          capturedAt: asset.creationTime,
-          filename: asset.filename,
-          inWantList: 0,
-          aiCategory: null,
-        };
-      })
-    );
-
-    return withUris;
+    return assets.map(a => ({
+      id: 'ss-' + a.id,
+      localIdentifier: a.id,
+      uri: a.uri,
+      // expo-media-library returns creationTime in seconds on Android
+      capturedAt: a.creationTime < 1e10 ? a.creationTime * 1000 : a.creationTime,
+      filename: a.filename,
+    }));
   }
 
   async function load() {
-    const [allStacks, premium] = await Promise.all([
-      getAllStacksWithCounts(),
-      getSetting('isPremium'),
+    const [allStacks, premium, screenshots] = await Promise.all([
+      getAllStacksWithCounts(), getSetting('isPremium'), loadScreenshots(),
     ]);
     setStacks(allStacks);
     setIsPremium(premium === 'true');
-
-    const screenshots = await loadScreenshots();
     setShots(screenshots);
-    setTotalOnDevice(screenshots.length);
+    const contents = {};
+    await Promise.all(allStacks.map(async s => {
+      try {
+        const items = await getStackItems(s.id, { limit: 500 });
+        items.forEach(item => {
+          const sid = 'ss-' + item.localIdentifier;
+          if (!contents[sid]) contents[sid] = [];
+          contents[sid].push({ id: s.id, name: s.name, emoji: s.emoji });
+        });
+      } catch (e) {}
+    }));
+    setStackContents(contents);
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
+  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); setRefreshing(false); }, []);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }, []);
+  // Build month options from actual screenshot dates
+  const monthOptions = [];
+  const seenMonths = new Set();
+  shots.forEach(s => {
+    const d = new Date(s.capturedAt);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    if (!seenMonths.has(key)) {
+      seenMonths.add(key);
+      monthOptions.push({
+        year: d.getFullYear(),
+        month: d.getMonth(),
+        label: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+      });
+    }
+  });
 
-  const displayed = filter === 'all' ? shots : shots;
+  // Filter shots
+  let filtered = shots;
+  if (dateFilter) {
+    filtered = filtered.filter(s => {
+      const d = new Date(s.capturedAt);
+      return d.getFullYear() === dateFilter.year && d.getMonth() === dateFilter.month;
+    });
+  }
+  if (filter !== 'all') {
+    const ids = new Set(Object.entries(stackContents)
+      .filter(([_, stks]) => stks.some(s => s.id === filter))
+      .map(([id]) => id));
+    filtered = filtered.filter(s => ids.has(s.id));
+  }
+
+  const unsorted = filtered.filter(s => !stackContents[s.id] || stackContents[s.id].length === 0);
+  const sorted   = filtered.filter(s =>  stackContents[s.id] && stackContents[s.id].length > 0);
+
+  // Build sections for SectionList
+  const sections = [];
+  if (filter === 'all' && !dateFilter) {
+    if (unsorted.length > 0) sections.push({ title: `Unsorted · ${unsorted.length}`, data: chunkIntoRows(unsorted) });
+    if (sorted.length > 0)   sections.push({ title: `Sorted · ${sorted.length}`, data: chunkIntoRows(sorted) });
+  } else {
+    if (filtered.length > 0) sections.push({ title: `${filtered.length} screenshots`, data: chunkIntoRows(filtered) });
+  }
 
   const chips = [
     { id: 'all', label: 'All', emoji: '', count: shots.length },
-    ...stacks.map(s => ({ id: s.id, label: s.name, emoji: s.emoji, count: s.itemCount || 0 })),
+    ...stacks.filter(s => !s.isSystem).map(s => ({
+      id: s.id, label: s.name, emoji: s.emoji, count: s.itemCount || 0,
+    })),
   ];
+
+  function handlePress(shot) {
+    if (bulkMode) {
+      setSelected(prev => {
+        const next = new Set(prev);
+        next.has(shot.id) ? next.delete(shot.id) : next.add(shot.id);
+        return next;
+      });
+    } else {
+      storeShot(shot); clearOld(); router.push({ pathname: '/preview', params: { id: shot.id } });
+    }
+  }
+
+  function handleLongPress(shot) {
+    if (!bulkMode) { setBulkMode(true); setSelected(new Set([shot.id])); }
+    else {
+      setSelected(prev => {
+        const next = new Set(prev);
+        next.has(shot.id) ? next.delete(shot.id) : next.add(shot.id);
+        return next;
+      });
+    }
+  }
+
+  function cancelBulk() { setBulkMode(false); setSelected(new Set()); }
+
+  async function assignBulkToStack(stackId) {
+    const shotsList = shots.filter(s => selected.has(s.id));
+    await Promise.all(shotsList.map(async shot => {
+      try {
+        await upsertScreenshot({ id: shot.id, localIdentifier: shot.localIdentifier, capturedAt: shot.capturedAt, filename: shot.filename });
+        await addToStack(stackId, shot.id);
+      } catch (e) { console.error(e); }
+    }));
+    setShowBulkModal(false);
+    cancelBulk();
+    await load();
+  }
+
+  const userStacks = stacks.filter(s => !s.isSystem);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Good morning.</Text>
-        <Text style={styles.meta}>
-          {permissionStatus !== 'granted'
-            ? 'Tap to allow screenshot access'
-            : `${shots.length} screenshots · ${stacks.filter(s => !s.isSystem).length} stacks`}
-        </Text>
+        <Text style={styles.title}>GrabStack</Text>
+        {bulkMode ? (
+          <TouchableOpacity onPress={cancelBulk} style={styles.cancelBtn}>
+            <Text style={styles.cancelBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.dateBtn, dateFilter && styles.dateBtnOn]}
+            onPress={() => setShowDatePicker(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.dateBtnTxt, dateFilter && styles.dateBtnTxtOn]}>
+              📅 {dateFilter ? dateFilter.label : 'Filter by month'}
+            </Text>
+            {dateFilter && (
+              <TouchableOpacity onPress={() => setDateFilter(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ fontSize: 12, color: colors.gold, marginLeft: 4 }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
-      <TouchableOpacity style={styles.searchBar} activeOpacity={0.7}>
-        <Text style={{ fontSize: 14 }}>🔍</Text>
-        <Text style={styles.searchPh}>Search screenshots…</Text>
-      </TouchableOpacity>
+      {/* Bulk action bar */}
+      {bulkMode && (
+        <View style={styles.bulkBar}>
+          <Text style={styles.bulkCount}>{selected.size} selected — long-press more to add</Text>
+          <TouchableOpacity
+            style={[styles.bulkBtn, selected.size === 0 && { opacity: 0.4 }]}
+            onPress={() => selected.size > 0 && setShowBulkModal(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.bulkBtnTxt}>Move to stack →</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipsContent} style={styles.chipsScroll}>
+      {/* Stack filter chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipsRow}
+        style={styles.chipsScroll}
+        bounces={false}
+      >
         {chips.map(c => (
-          <TouchableOpacity key={c.id}
+          <TouchableOpacity
+            key={c.id}
             style={[styles.chip, filter === c.id && styles.chipOn]}
-            onPress={() => setFilter(c.id)} activeOpacity={0.8}>
-            {c.emoji ? <Text style={{ fontSize: 12 }}>{c.emoji}</Text> : null}
-            <Text style={[styles.chipLabel, filter === c.id && styles.chipLabelOn]}>{c.label}</Text>
-            <View style={[styles.chipBadge, filter === c.id && styles.chipBadgeOn]}>
-              <Text style={[styles.chipBadgeText, filter === c.id && styles.chipBadgeTextOn]}>{c.count}</Text>
+            onPress={() => setFilter(c.id)}
+            activeOpacity={0.8}
+          >
+            {c.emoji ? <Text style={styles.chipEmoji}>{c.emoji}</Text> : null}
+            <Text style={[styles.chipLabel, filter === c.id && styles.chipLabelOn]} numberOfLines={1}>
+              {c.label}
+            </Text>
+            <View style={[styles.chipPill, filter === c.id && styles.chipPillOn]}>
+              <Text style={[styles.chipPillTxt, filter === c.id && styles.chipPillTxtOn]}>{c.count}</Text>
             </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
-      {permissionStatus !== 'granted' && permissionStatus !== null && (
-        <TouchableOpacity style={styles.permissionBar} onPress={load} activeOpacity={0.8}>
-          <Text style={styles.permissionText}>📷 Tap to allow access to your screenshots</Text>
-        </TouchableOpacity>
-      )}
-
-      {showNudge && shots.length > 0 && (
-        <View style={styles.nudge}>
-          <Text style={{ fontSize: 16 }}>💡</Text>
-          <Text style={styles.nudgeText}>
-            <Text style={{ fontFamily: 'Geist-Medium', color: colors.ink }}>{shots.length} screenshots</Text>
-            {' '}ready to sort into stacks.
-          </Text>
-          <TouchableOpacity onPress={() => setShowNudge(false)}>
-            <Text style={{ fontSize: 16, color: colors.ink3 }}>✕</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {!isPremium && shots.length >= FREE_LIMIT && (
         <TouchableOpacity style={styles.limitBar} onPress={() => router.push('/paywall')} activeOpacity={0.8}>
-          <Text style={styles.limitText}>{FREE_LIMIT} screenshot limit — tap to unlock all</Text>
+          <Text style={styles.limitTxt}>Showing first {FREE_LIMIT} — upgrade for all</Text>
           <Text style={styles.limitCta}>Upgrade →</Text>
         </TouchableOpacity>
       )}
 
-      <FlatList
-        data={displayed}
-        keyExtractor={item => item.id}
-        numColumns={3}
-        contentContainerStyle={styles.gridContent}
-        columnWrapperStyle={styles.gridRow}
-        renderItem={({ item }) => (
-          <ScreenshotCell
-            shot={item}
-            onPress={s => router.push({ pathname: '/preview', params: { id: s.id, uri: s.uri } })}
+      {!bulkMode && (
+        <View style={styles.hintBar}>
+          <Text style={styles.hintTxt}>Long-press to select multiple screenshots</Text>
+        </View>
+      )}
+
+      {/* Main grid using SectionList */}
+      <SectionList
+        sections={sections}
+        keyExtractor={(item, index) => `row-${index}-${item.map(s => s.id).join('-')}`}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.gold} />}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionHeaderTxt}>{section.title}</Text>
+          </View>
+        )}
+        renderItem={({ item: rowShots }) => (
+          <RowItem
+            shots={rowShots}
+            stackContents={stackContents}
+            selected={selected}
+            onPress={handlePress}
+            onLongPress={handleLongPress}
           />
         )}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.gold} />}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={shots.length > 0 ? <Text style={styles.gridLabel}>Recent</Text> : null}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={{ fontSize: 44, marginBottom: 12 }}>📷</Text>
+            <Text style={{ fontSize: 40, marginBottom: 10 }}>📷</Text>
             <Text style={styles.emptyTitle}>
-              {permissionStatus === 'granted' ? 'No screenshots found' : 'Allow access to get started'}
+              {dateFilter ? `Nothing in ${dateFilter.label}` : 'No screenshots'}
             </Text>
-            <Text style={styles.emptyBody}>
-              {permissionStatus === 'granted'
-                ? 'Pull down to refresh'
-                : 'GrabStack needs access to your Screenshots album'}
-            </Text>
-            {permissionStatus !== 'granted' && (
-              <TouchableOpacity style={styles.emptyBtn} onPress={load} activeOpacity={0.88}>
-                <Text style={styles.emptyBtnText}>Allow access</Text>
-              </TouchableOpacity>
-            )}
+            <Text style={styles.emptyBody}>Pull down to refresh</Text>
           </View>
         }
       />
+
+      {/* Date picker modal */}
+      <Modal visible={showDatePicker} transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setShowDatePicker(false)}>
+          <Pressable style={styles.modalSheet} onPress={e => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Filter by month</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <TouchableOpacity style={styles.monthRow} onPress={() => { setDateFilter(null); setShowDatePicker(false); }}>
+                <Text style={[styles.monthLabel, !dateFilter && { color: colors.gold, fontFamily: 'Geist-Medium' }]}>All time</Text>
+                <Text style={styles.monthCount}>{shots.length}</Text>
+                {!dateFilter && <Text style={{ color: colors.gold, marginLeft: 8 }}>✓</Text>}
+              </TouchableOpacity>
+              {monthOptions.map((m, i) => {
+                const isActive = dateFilter && dateFilter.year === m.year && dateFilter.month === m.month;
+                const count = shots.filter(s => {
+                  const d = new Date(s.capturedAt);
+                  return d.getFullYear() === m.year && d.getMonth() === m.month;
+                }).length;
+                return (
+                  <TouchableOpacity key={i} style={styles.monthRow}
+                    onPress={() => { setDateFilter(m); setShowDatePicker(false); }}>
+                    <Text style={[styles.monthLabel, isActive && { color: colors.gold, fontFamily: 'Geist-Medium' }]}>{m.label}</Text>
+                    <Text style={styles.monthCount}>{count}</Text>
+                    {isActive && <Text style={{ color: colors.gold, marginLeft: 8 }}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Bulk assign modal */}
+      <Modal visible={showBulkModal} transparent animationType="slide" onRequestClose={() => setShowBulkModal(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setShowBulkModal(false)}>
+          <Pressable style={styles.modalSheet} onPress={e => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Move {selected.size} to…</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {userStacks.length === 0 ? (
+                <Text style={{ fontFamily: 'Geist-Regular', fontSize: 14, color: colors.ink2, textAlign: 'center', padding: 20 }}>
+                  Create a stack first in the Stacks tab
+                </Text>
+              ) : userStacks.map(st => (
+                <TouchableOpacity key={st.id} style={styles.stackRow} onPress={() => assignBulkToStack(st.id)} activeOpacity={0.8}>
+                  <Text style={{ fontSize: 22 }}>{st.emoji}</Text>
+                  <Text style={styles.stackRowName}>{st.name}</Text>
+                  <Text style={{ color: colors.ink3, fontSize: 16 }}>→</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: colors.cream },
-  header: { paddingHorizontal: GRID_PAD, paddingTop: 8, paddingBottom: 2 },
-  title:  { fontFamily: 'InstrumentSerif-Regular', fontSize: 32, color: colors.ink, letterSpacing: -0.8 },
-  meta:   { fontFamily: 'Geist-Regular', fontSize: 13, color: colors.ink3, marginTop: 2, marginBottom: 14 },
-  searchBar: { marginHorizontal: GRID_PAD, marginBottom: 12, backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, height: 42, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, gap: 8 },
-  searchPh:  { fontFamily: 'Geist-Regular', fontSize: 14, color: colors.ink3 },
-  chipsScroll:   { flexGrow: 0, marginBottom: 12 },
-  chipsContent:  { paddingHorizontal: GRID_PAD, gap: 8 },
-  chip:          { backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 7, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  chipOn:        { backgroundColor: colors.ink, borderColor: colors.ink },
-  chipLabel:     { fontFamily: 'Geist-Medium', fontSize: 12, color: colors.ink },
-  chipLabelOn:   { color: colors.cream },
-  chipBadge:     { backgroundColor: colors.cream3, borderRadius: 100, paddingHorizontal: 5, paddingVertical: 1 },
-  chipBadgeOn:   { backgroundColor: 'rgba(255,255,255,0.18)' },
-  chipBadgeText: { fontFamily: 'Geist-Regular', fontSize: 10, color: colors.ink2 },
-  chipBadgeTextOn:{ color: 'rgba(255,255,255,0.7)' },
-  permissionBar: { marginHorizontal: GRID_PAD, marginBottom: 10, backgroundColor: colors.blueBg, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(37,99,235,0.2)', paddingVertical: 10, paddingHorizontal: 14 },
-  permissionText:{ fontFamily: 'Geist-Medium', fontSize: 13, color: colors.blue, textAlign: 'center' },
-  nudge: { marginHorizontal: GRID_PAD, marginBottom: 10, backgroundColor: colors.goldBg, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(196,149,106,0.25)', padding: 11, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  nudgeText: { fontFamily: 'Geist-Regular', fontSize: 13, color: colors.ink, flex: 1, lineHeight: 18 },
-  limitBar:  { marginHorizontal: GRID_PAD, marginBottom: 10, backgroundColor: colors.redBg, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(192,57,43,0.15)', paddingVertical: 9, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  limitText: { fontFamily: 'Geist-Regular', fontSize: 12, color: colors.red, flex: 1 },
-  limitCta:  { fontFamily: 'Geist-SemiBold', fontSize: 12, color: colors.red },
-  gridContent: { paddingHorizontal: GRID_PAD, paddingBottom: 16 },
-  gridRow:     { gap: GRID_GAP, marginBottom: GRID_GAP },
-  gridLabel:   { fontFamily: 'Geist-SemiBold', fontSize: 11, color: colors.ink3, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 },
-  cell:        { width: CELL_W, height: CELL_H, borderRadius: radius.xs, overflow: 'hidden', backgroundColor: colors.cream2 },
-  cellImg:     { width: '100%', height: '100%' },
-  heartPin:    { position: 'absolute', top: 5, right: 5, fontSize: 12 },
-  empty:       { paddingTop: 60, alignItems: 'center', gap: 10, paddingHorizontal: 32 },
-  emptyTitle:  { fontFamily: 'InstrumentSerif-Regular', fontSize: 22, color: colors.ink, textAlign: 'center' },
-  emptyBody:   { fontFamily: 'Geist-Regular', fontSize: 14, color: colors.ink2, textAlign: 'center', lineHeight: 20 },
-  emptyBtn:    { marginTop: 8, backgroundColor: colors.ink, borderRadius: radius.sm, paddingVertical: 12, paddingHorizontal: 24 },
-  emptyBtnText:{ fontFamily: 'Geist-Medium', fontSize: 15, color: colors.cream },
+  header: { paddingHorizontal: GRID_PAD, paddingTop: 8, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title:  { fontFamily: 'InstrumentSerif-Regular', fontSize: 30, color: colors.ink, letterSpacing: -0.5 },
+  dateBtn: { backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 8, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center' },
+  dateBtnOn: { backgroundColor: colors.goldBg, borderColor: colors.gold },
+  dateBtnTxt: { fontFamily: 'Geist-Medium', fontSize: 12, color: colors.ink2 },
+  dateBtnTxtOn: { color: colors.gold },
+  cancelBtn: { backgroundColor: colors.redBg, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(192,57,43,0.2)', paddingVertical: 8, paddingHorizontal: 14 },
+  cancelBtnText: { fontFamily: 'Geist-Medium', fontSize: 13, color: colors.red },
+  bulkBar: { position: 'absolute', bottom: 100, left: GRID_PAD, right: GRID_PAD, backgroundColor: colors.ink, borderRadius: radius.sm, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, zIndex: 50, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 8 },
+  bulkCount: { fontFamily: 'Geist-Regular', fontSize: 12, color: 'rgba(255,255,255,0.7)', flex: 1 },
+  bulkBtn: { backgroundColor: colors.gold, borderRadius: radius.pill, paddingVertical: 7, paddingHorizontal: 14 },
+  bulkBtnTxt: { fontFamily: 'Geist-SemiBold', fontSize: 13, color: '#fff' },
+  // CHIPS — explicit height so they never get clipped
+  chipsScroll: { flexShrink: 0, flexGrow: 0, height: 56 },
+  chipsRow: { paddingHorizontal: GRID_PAD, gap: 8, alignItems: 'center', height: 56 },
+  chip: {
+    height: 40,
+    backgroundColor: colors.cream2, borderRadius: radius.pill,
+    borderWidth: 1.5, borderColor: colors.border,
+    paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+  },
+  chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  chipEmoji: { fontSize: 14 },
+  chipLabel: { fontFamily: 'Geist-Medium', fontSize: 13, color: colors.ink, maxWidth: 100 },
+  chipLabelOn: { color: colors.cream },
+  chipPill: { backgroundColor: colors.cream3, borderRadius: 100, paddingHorizontal: 6, paddingVertical: 2 },
+  chipPillOn: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  chipPillTxt: { fontFamily: 'Geist-Regular', fontSize: 11, color: colors.ink2 },
+  chipPillTxtOn: { color: 'rgba(255,255,255,0.7)' },
+  limitBar: { marginHorizontal: GRID_PAD, marginBottom: 8, backgroundColor: colors.redBg, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(192,57,43,0.15)', paddingVertical: 9, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  limitTxt: { fontFamily: 'Geist-Regular', fontSize: 12, color: colors.red, flex: 1 },
+  limitCta: { fontFamily: 'Geist-SemiBold', fontSize: 12, color: colors.red },
+  hintBar: { marginHorizontal: GRID_PAD, marginBottom: 8 },
+  hintTxt: { fontFamily: 'Geist-Regular', fontSize: 11, color: colors.ink3, textAlign: 'center' },
+  listContent: { paddingHorizontal: GRID_PAD, paddingBottom: 24 },
+  sectionHeader: { paddingTop: 12, paddingBottom: 8, backgroundColor: colors.cream },
+  sectionHeaderTxt: { fontFamily: 'Geist-SemiBold', fontSize: 11, color: colors.ink3, textTransform: 'uppercase', letterSpacing: 0.8 },
+  gridRow: { flexDirection: 'row', gap: GRID_GAP, marginBottom: GRID_GAP },
+  cell: { width: CELL_W, height: CELL_H, borderRadius: radius.xs, overflow: 'hidden', backgroundColor: colors.cream2 },
+  cellSelected: { opacity: 0.7 },
+  cellImg: { width: '100%', height: '100%' },
+  selectOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(196,149,106,0.25)', alignItems: 'flex-end', justifyContent: 'flex-start', padding: 5 },
+  selectCheck: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  assignedBadge: { position: 'absolute', bottom: 5, left: 5, backgroundColor: 'rgba(250,248,245,0.92)', borderRadius: 100, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  empty: { paddingTop: 60, alignItems: 'center', gap: 8, paddingHorizontal: 32 },
+  emptyTitle: { fontFamily: 'InstrumentSerif-Regular', fontSize: 22, color: colors.ink },
+  emptyBody: { fontFamily: 'Geist-Regular', fontSize: 14, color: colors.ink2, textAlign: 'center' },
+  modalBg: { flex: 1, backgroundColor: 'rgba(26,25,22,0.42)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: colors.cream, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderTopWidth: 1, borderColor: colors.border, padding: 24, paddingBottom: 40, maxHeight: '65%' },
+  modalHandle: { width: 40, height: 4, backgroundColor: colors.cream3, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  modalTitle: { fontFamily: 'InstrumentSerif-Regular', fontSize: 22, color: colors.ink, marginBottom: 16 },
+  monthRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderColor: colors.border },
+  monthLabel: { fontFamily: 'Geist-Regular', fontSize: 15, color: colors.ink, flex: 1 },
+  monthCount: { fontFamily: 'Geist-Regular', fontSize: 13, color: colors.ink3 },
+  stackRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderColor: colors.border, gap: 12 },
+  stackRowName: { fontFamily: 'Geist-Medium', fontSize: 15, color: colors.ink, flex: 1 },
 });
