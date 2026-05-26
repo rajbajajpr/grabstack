@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "GrabStack",
+    "slug": "grabstack",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "grabstack",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.grabstack.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FAF8F5",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
+      },
+      "package": "com.grabstack.app",
+      "permissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-dev-client",
+      "expo-sqlite",
+      "expo-font",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "GrabStack needs access to your Screenshots album to organise them.",
+          "savePhotosPermission": false,
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#FAF8F5"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "anthropicKey": "YOUR_ANTHROPIC_KEY_HERE",
+      "router": {},
+      "eas": {
+        "projectId": "2614c19e-c0fb-4987-a203-0b27b1232368"
+      }
+    }
+  }
+}
