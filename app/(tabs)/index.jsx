@@ -109,24 +109,24 @@ export default function HomeScreen() {
   async function loadScreenshots() {
     const { status } = await MediaLibrary.requestPermissionsAsync(true);
     if (status !== 'granted') return [];
-    const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
-    const screenshotAlbum = albums.find(a => a.title === 'Screenshots' || a.title === 'Screenshot');
-    let assets = [];
-    if (screenshotAlbum) {
-      const r = await MediaLibrary.getAssetsAsync({ album: screenshotAlbum, mediaType: 'photo', sortBy: [['creationTime', false]], first: FREE_LIMIT });
-      assets = r.assets;
-    } else {
-      const r = await MediaLibrary.getAssetsAsync({ mediaType: 'photo', sortBy: [['creationTime', false]], first: FREE_LIMIT });
-      assets = r.assets;
+    await new Promise(r => setTimeout(r, 300));
+    try {
+      const r = await MediaLibrary.getAssetsAsync({
+        mediaType: 'photo',
+        sortBy: [['creationTime', false]],
+        first: FREE_LIMIT,
+      });
+      return r.assets.map(a => ({
+        id: 'ss-' + a.id,
+        localIdentifier: a.id,
+        uri: a.uri,
+        capturedAt: a.creationTime < 1e10 ? a.creationTime * 1000 : a.creationTime,
+        filename: a.filename,
+      }));
+    } catch (e) {
+      console.error('loadScreenshots error:', e);
+      return [];
     }
-    return assets.map(a => ({
-      id: 'ss-' + a.id,
-      localIdentifier: a.id,
-      uri: a.uri,
-      // expo-media-library returns creationTime in seconds on Android
-      capturedAt: a.creationTime < 1e10 ? a.creationTime * 1000 : a.creationTime,
-      filename: a.filename,
-    }));
   }
 
   async function load() {
