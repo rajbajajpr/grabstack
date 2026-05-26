@@ -77,7 +77,19 @@ export default function PreviewScreen() {
     }
   }
 
-  async function toggleWant() {
+  async function handleShare() {
+    try {
+      if (uri) {
+        // Share the actual image file on Android
+        await Share.share({
+          url: uri,
+          message: 'Shared from GrabStack',
+        });
+      } else {
+        await Share.share({ message: 'Shared from GrabStack' });
+      }
+    } catch (e) { console.error(e); }
+  }
     try {
       const next = !inWant;
       setInWant(next);
@@ -102,7 +114,7 @@ export default function PreviewScreen() {
           <TouchableOpacity onPress={toggleWant} hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}>
             <Text style={s.actIcon}>{inWant ? '❤️' : '🤍'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => Share.share({ message: 'Shared from GrabStack' })}>
+          <TouchableOpacity onPress={handleShare}>
             <Text style={s.actIcon}>↗</Text>
           </TouchableOpacity>
         </View>
