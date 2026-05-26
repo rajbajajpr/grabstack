@@ -285,14 +285,19 @@ export default function HomeScreen() {
       {/* Bulk action bar */}
       {bulkMode && (
         <View style={styles.bulkBar}>
-          <Text style={styles.bulkCount}>{selected.size} selected — long-press more to add</Text>
-          <TouchableOpacity
-            style={[styles.bulkBtn, selected.size === 0 && { opacity: 0.4 }]}
-            onPress={() => selected.size > 0 && setShowBulkModal(true)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.bulkBtnTxt}>Move to stack →</Text>
-          </TouchableOpacity>
+          <Text style={styles.bulkCount}>{selected.size} selected</Text>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <TouchableOpacity style={styles.bulkCancelBtn} onPress={cancelBulk} activeOpacity={0.8}>
+              <Text style={styles.bulkCancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.bulkBtn, selected.size === 0 && { opacity: 0.4 }]}
+              onPress={() => selected.size > 0 && setShowBulkModal(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.bulkBtnTxt}>Move to stack →</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -438,10 +443,12 @@ const styles = StyleSheet.create({
   dateBtnTxtOn: { color: colors.gold },
   cancelBtn: { backgroundColor: colors.redBg, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(192,57,43,0.2)', paddingVertical: 8, paddingHorizontal: 14 },
   cancelBtnText: { fontFamily: 'Geist-Medium', fontSize: 13, color: colors.red },
-  bulkBar: { position: 'absolute', bottom: 100, left: GRID_PAD, right: GRID_PAD, backgroundColor: colors.ink, borderRadius: radius.sm, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, zIndex: 50, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 8 },
-  bulkCount: { fontFamily: 'Geist-Regular', fontSize: 12, color: 'rgba(255,255,255,0.7)', flex: 1 },
-  bulkBtn: { backgroundColor: colors.gold, borderRadius: radius.pill, paddingVertical: 7, paddingHorizontal: 14 },
-  bulkBtnTxt: { fontFamily: 'Geist-SemiBold', fontSize: 13, color: '#fff' },
+  bulkBar:       { position: 'absolute', bottom: 100, left: GRID_PAD, right: GRID_PAD, backgroundColor: colors.ink, borderRadius: radius.sm, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, zIndex: 50, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 8 },
+  bulkCount:     { fontFamily: 'Geist-Regular', fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+  bulkCancelBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
+  bulkCancelTxt: { fontFamily: 'Geist-Medium', fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+  bulkBtn:       { backgroundColor: colors.gold, borderRadius: radius.pill, paddingVertical: 7, paddingHorizontal: 14 },
+  bulkBtnTxt:    { fontFamily: 'Geist-SemiBold', fontSize: 13, color: '#fff' },
   // CHIPS — explicit height so they never get clipped
   chipsScroll: { flexShrink: 0, flexGrow: 0, height: 56 },
   chipsRow: { paddingHorizontal: GRID_PAD, gap: 8, alignItems: 'center', height: 56 },
