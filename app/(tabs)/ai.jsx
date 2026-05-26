@@ -1,6 +1,7 @@
 // app/(tabs)/ai.jsx
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { getSetting, getScreenshotsByCategory, createStack, addToStack } from '../../services/database';
 import { CATEGORIES, CATEGORY_KEYS, colors, spacing, radius, fontSize } from '../../constants/theme';

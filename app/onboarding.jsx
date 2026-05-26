@@ -2,10 +2,8 @@
 // First screen the user sees. Privacy-first messaging, no account required.
 
 import { useState } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity,
-  SafeAreaView, ActivityIndicator, ScrollView,
-} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView,  } from 'react-native';
 import { useRouter } from 'expo-router';
 import { setSetting } from '../services/database';
 import { colors, fontSize, spacing, radius } from '../constants/theme';

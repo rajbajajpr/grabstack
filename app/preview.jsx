@@ -1,6 +1,7 @@
 // app/preview.jsx
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView, Share } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Share } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getAllStacksWithCounts, getStacksForScreenshot, addToStack, removeFromStack, setWantList, getSetting } from '../services/database';
 import { getAssetUri } from '../services/media';

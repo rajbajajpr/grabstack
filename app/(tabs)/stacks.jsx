@@ -1,10 +1,8 @@
 // app/(tabs)/stacks.jsx
 
 import { useState, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  FlatList, Image, Modal, TextInput, Pressable, SafeAreaView,
-} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, Image, Modal, TextInput, Pressable,  } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { getAllStacksWithCounts, getStackItems, createStack } from '../../services/database';
 import { getAssetUri } from '../../services/media';

@@ -1,6 +1,7 @@
 // app/paywall.jsx
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { setSetting } from '../services/database';
 import { colors, spacing, radius, fontSize } from '../constants/theme';
