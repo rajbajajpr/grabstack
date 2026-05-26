@@ -268,3 +268,26 @@ export async function clearAllData() {
     DELETE FROM user_settings;
   `);
 }
+
+export async function getAiUsage() {
+  const count = await getSetting('aiAnalysisCount');
+  const resetDate = await getSetting('aiAnalysisResetDate');
+  const tier = await getSetting('userTier'); // free, starter, pro
+  return {
+    count: parseInt(count || '0'),
+    resetDate: resetDate || null,
+    tier: tier || 'free',
+  };
+}
+
+export async function incrementAiUsage() {
+  const current = parseInt(await getSetting('aiAnalysisCount') || '0');
+  await setSetting('aiAnalysisCount', String(current + 1));
+}
+
+export async function setUserTier(tier) {
+  await setSetting('userTier', tier);
+  // Reset usage count on upgrade
+  await setSetting('aiAnalysisCount', '0');
+  await setSetting('aiAnalysisResetDate', new Date().toISOString());
+}

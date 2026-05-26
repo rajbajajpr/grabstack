@@ -58,6 +58,9 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)"     options={{ animation: 'fade' }} />
           <Stack.Screen name="preview"    options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
           <Stack.Screen name="paywall"    options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <Stack.Screen name="settings"   options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="share"      options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="stack-detail" options={{ animation: 'slide_from_right' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

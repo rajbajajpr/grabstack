@@ -107,9 +107,10 @@ export default function HomeScreen() {
   const [showBulkModal, setShowBulkModal] = useState(false);
 
   async function loadScreenshots() {
-    const { status } = await MediaLibrary.requestPermissionsAsync(true);
-    if (status !== 'granted') return [];
-    await new Promise(r => setTimeout(r, 300));
+    const perm = await MediaLibrary.requestPermissionsAsync(true);
+    console.log('Permission status:', perm.status, 'granted:', perm.granted, 'accessPrivileges:', perm.accessPrivileges);
+    if (!perm.granted) return [];
+    await new Promise(r => setTimeout(r, 500));
     try {
       const r = await MediaLibrary.getAssetsAsync({
         mediaType: 'photo',
@@ -256,11 +257,7 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>GrabStack</Text>
-        {bulkMode ? (
-          <TouchableOpacity onPress={cancelBulk} style={styles.cancelBtn}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
-          </TouchableOpacity>
-        ) : (
+        <View style={styles.headerRight}>
           <TouchableOpacity
             style={[styles.dateBtn, dateFilter && styles.dateBtnOn]}
             onPress={() => setShowDatePicker(true)}
@@ -275,7 +272,14 @@ export default function HomeScreen() {
               </TouchableOpacity>
             )}
           </TouchableOpacity>
-        )}
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => router.push('/settings')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.settingsBtnText}>⚙</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Bulk action bar */}
@@ -425,6 +429,9 @@ const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: colors.cream },
   header: { paddingHorizontal: GRID_PAD, paddingTop: 8, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title:  { fontFamily: 'InstrumentSerif-Regular', fontSize: 30, color: colors.ink, letterSpacing: -0.5 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  settingsBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.cream2, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  settingsBtnText: { fontSize: 16, color: colors.ink2 },
   dateBtn: { backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 8, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center' },
   dateBtnOn: { backgroundColor: colors.goldBg, borderColor: colors.gold },
   dateBtnTxt: { fontFamily: 'Geist-Medium', fontSize: 12, color: colors.ink2 },
