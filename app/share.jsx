@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Share,
-  ScrollView, ActivityIndicator, Linking,
+  ScrollView, ActivityIndicator, Linking, Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
 import ViewShot from 'react-native-view-shot';
+import RNShare from 'react-native-share';
 import { getStackWithCount, getStackItems } from '../services/database';
 import { colors, radius } from '../constants/theme';
 
@@ -64,8 +65,28 @@ export default function ShareScreen() {
         title: stack?.name,
       });
       setShared(true);
+    } catch (e) { console.error('Share error:', e); }
+    setCapturing(false);
+  }
+
+  async function shareFullRes() {
+    const uris = items.filter(i => i.uri).map(i => i.uri);
+    if (uris.length === 0) return;
+    setCapturing(true);
+    try {
+      await RNShare.open({
+        urls: uris,
+        type: 'image/*',
+        title: `${stack?.emoji} ${stack?.name}`,
+        message: `My "${stack?.name}" stack — organised with GrabStack 📚`,
+        failOnCancel: false,
+      });
+      setShared(true);
     } catch (e) {
-      console.error('Share error:', e);
+      // Fallback to one at a time if multi-share fails
+      if (uris.length > 0) {
+        await Share.share({ url: uris[0], message: `My "${stack?.name}" stack (${uris.length} screenshots)` });
+      }
     }
     setCapturing(false);
   }
@@ -75,15 +96,17 @@ export default function ShareScreen() {
     setCapturing(true);
     try {
       const capturedUri = await viewShotRef.current.capture();
-      // Try WhatsApp first, fall back to general share
-      Linking.openURL(`whatsapp://send`).catch(() => {});
-      setTimeout(async () => {
-        await Share.share({
-          url: capturedUri,
-          message: `My "${stack?.name}" stack — organised with GrabStack 📚`,
-        });
-      }, 300);
-    } catch (e) { console.error(e); }
+      await RNShare.shareSingle({
+        url: capturedUri,
+        type: 'image/jpeg',
+        social: RNShare.Social.WHATSAPP,
+        message: `My "${stack?.name}" stack — organised with GrabStack 📚`,
+        failOnCancel: false,
+      });
+      setShared(true);
+    } catch (e) {
+      await Share.share({ url: capturedUri, message: `My "${stack?.name}" stack` });
+    }
     setCapturing(false);
   }
 
@@ -158,34 +181,59 @@ export default function ShareScreen() {
 
             <Text style={s.previewLabel}>This is what gets shared</Text>
 
-            {/* Share buttons */}
+            {/* Share options */}
             <View style={s.buttons}>
-              <TouchableOpacity
-                style={[s.mainBtn, (capturing || items.length === 0) && { opacity: 0.5 }]}
-                onPress={shareAsImage}
-                disabled={capturing || items.length === 0}
-                activeOpacity={0.88}
-              >
-                {capturing
-                  ? <ActivityIndicator color={colors.cream} />
-                  : <Text style={s.mainBtnText}>{shared ? '✓ Shared!' : '↗  Share image'}</Text>
-                }
-              </TouchableOpacity>
 
-              <View style={s.optRow}>
-                <TouchableOpacity style={s.optBtn} onPress={shareToWhatsApp} activeOpacity={0.8} disabled={capturing}>
-                  <Text style={s.optIcon}>💬</Text>
-                  <Text style={s.optLabel}>WhatsApp</Text>
+              {/* Option 1: Share as card */}
+              <View style={s.optionBlock}>
+                <Text style={s.optionTitle}>Share as card</Text>
+                <Text style={s.optionDesc}>A single image showing your stack — great for WhatsApp, Instagram, iMessage</Text>
+                <TouchableOpacity
+                  style={[s.mainBtn, (capturing || items.length === 0) && { opacity: 0.5 }]}
+                  onPress={shareAsImage}
+                  disabled={capturing || items.length === 0}
+                  activeOpacity={0.88}
+                >
+                  {capturing
+                    ? <ActivityIndicator color={colors.cream} />
+                    : <Text style={s.mainBtnText}>{shared ? '✓ Shared!' : '↗  Share card'}</Text>
+                  }
                 </TouchableOpacity>
-                <TouchableOpacity style={s.optBtn} onPress={shareAsImage} activeOpacity={0.8} disabled={capturing}>
-                  <Text style={s.optIcon}>📱</Text>
-                  <Text style={s.optLabel}>Messages</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.optBtn} onPress={shareAsImage} activeOpacity={0.8} disabled={capturing}>
-                  <Text style={s.optIcon}>📸</Text>
-                  <Text style={s.optLabel}>Instagram</Text>
+                <View style={s.optRow}>
+                  <TouchableOpacity style={s.optBtn} onPress={shareToWhatsApp} activeOpacity={0.8} disabled={capturing}>
+                    <Text style={s.optIcon}>💬</Text>
+                    <Text style={s.optLabel}>WhatsApp</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.optBtn} onPress={shareAsImage} activeOpacity={0.8} disabled={capturing}>
+                    <Text style={s.optIcon}>📱</Text>
+                    <Text style={s.optLabel}>Messages</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.optBtn} onPress={shareAsImage} activeOpacity={0.8} disabled={capturing}>
+                    <Text style={s.optIcon}>📸</Text>
+                    <Text style={s.optLabel}>Instagram</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={s.divider} />
+
+              {/* Option 2: Share full res */}
+              <View style={s.optionBlock}>
+                <Text style={s.optionTitle}>Share all images</Text>
+                <Text style={s.optionDesc}>All {items.length} screenshots at full resolution — recipient can save them to their camera roll</Text>
+                <TouchableOpacity
+                  style={[s.fullResBtn, (capturing || items.length === 0) && { opacity: 0.5 }]}
+                  onPress={shareFullRes}
+                  disabled={capturing || items.length === 0}
+                  activeOpacity={0.88}
+                >
+                  {capturing
+                    ? <ActivityIndicator color={colors.ink} />
+                    : <Text style={s.fullResBtnText}>↗  Share {items.length} full-res images</Text>
+                  }
                 </TouchableOpacity>
               </View>
+
             </View>
 
             {items.length === 0 && (
@@ -229,9 +277,14 @@ const s = StyleSheet.create({
   loadingText: { fontFamily: 'Geist-Regular', fontSize: 14, color: colors.ink2 },
   viewShotWrap:{ alignSelf: 'center', marginHorizontal: 24, marginBottom: 8, borderRadius: radius.sm, overflow: 'hidden', shadowColor: '#1A1916', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 6 },
   previewLabel:{ fontFamily: 'Geist-Regular', fontSize: 12, color: colors.ink3, textAlign: 'center', marginBottom: 20 },
-  buttons: { paddingHorizontal: 24 },
+  optionBlock: { marginBottom: 4 },
+  optionTitle: { fontFamily: 'Geist-SemiBold', fontSize: 14, color: colors.ink, marginBottom: 4 },
+  optionDesc:  { fontFamily: 'Geist-Regular', fontSize: 13, color: colors.ink2, lineHeight: 18, marginBottom: 12 },
+  divider:     { height: 1, backgroundColor: colors.border, marginVertical: 20 },
   mainBtn: { backgroundColor: colors.ink, borderRadius: radius.sm, height: 52, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   mainBtnText: { fontFamily: 'Geist-Medium', fontSize: 16, color: colors.cream },
+  fullResBtn:  { backgroundColor: colors.cream2, borderRadius: radius.sm, height: 52, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border2 },
+  fullResBtnText: { fontFamily: 'Geist-Medium', fontSize: 15, color: colors.ink },
   optRow:  { flexDirection: 'row', gap: 10 },
   optBtn:  { flex: 1, backgroundColor: colors.cream2, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, padding: 12, alignItems: 'center', gap: 5 },
   optIcon: { fontSize: 22 },
