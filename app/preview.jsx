@@ -70,7 +70,7 @@ export default function PreviewScreen() {
         await addToStack(stackId, shotId);
         setInStacks(prev => [...prev, stackId]);
         setLastAdded(stackName);
-        setTimeout(() => goBack(), 1200);
+        setTimeout(() => { try { router.back(); } catch { router.replace("/(tabs)"); } }, 1200);
       }
     } catch (e) {
       console.error('toggleStack:', e);
@@ -113,7 +113,7 @@ export default function PreviewScreen() {
           <Image
             source={{ uri }}
             style={s.imgCard}
-            resizeMode="contain"
+            contentFit="contain"
 
           />
         ) : (

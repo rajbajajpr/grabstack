@@ -20,7 +20,8 @@ const CELL_H = CELL_W * (17 / 9);
 const FREE_LIMIT = 100;
 
 function ScreenshotCell({ shot, assignedStacks, selected, onPress, onLongPress }) {
-  const isAssigned = assignedStacks && assignedStacks.length > 0;
+  const stacks = assignedStacks || [];
+  const inWant = shot.inWantList === 1 || shot.inWantList === true;
   return (
     <TouchableOpacity
       style={[styles.cell, selected && styles.cellSelected]}
@@ -42,9 +43,18 @@ function ScreenshotCell({ shot, assignedStacks, selected, onPress, onLongPress }
           </View>
         </View>
       )}
-      {isAssigned && !selected && (
-        <View style={styles.assignedBadge}>
-          <Text style={{ fontSize: 11 }}>{assignedStacks[0].emoji}</Text>
+      {!selected && stacks.length > 0 && (
+        <View style={styles.stackBadges}>
+          {stacks.slice(0, 3).map((st, i) => (
+            <View key={st.id} style={styles.stackBadge}>
+              <Text style={{ fontSize: 10 }}>{st.emoji}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {!selected && inWant && (
+        <View style={styles.heartBadge}>
+          <Text style={{ fontSize: 10 }}>❤️</Text>
         </View>
       )}
     </TouchableOpacity>
@@ -137,6 +147,13 @@ export default function HomeScreen() {
         });
       } catch (e) {}
     }));
+    // Mark want list items on shots
+    const wantStack = allStacks.find(s => s.id === 'want-list');
+    if (wantStack) {
+      const wantItems = await getStackItems('want-list', { limit: 500 });
+      const wantIds = new Set(wantItems.map(i => 'ss-' + i.localIdentifier));
+      setShots(prev => prev.map(s => ({ ...s, inWantList: wantIds.has(s.id) ? 1 : 0 })));
+    }
     setStackContents(contents);
   }
 
@@ -175,6 +192,7 @@ export default function HomeScreen() {
   }
 
   const unsorted = filtered.filter(s => !stackContents[s.id] || stackContents[s.id].length === 0);
+  // Most recently sorted first — shots array is already newest-first, so sorted preserves that
   const sorted   = filtered.filter(s =>  stackContents[s.id] && stackContents[s.id].length > 0);
 
   // Build sections for SectionList
@@ -450,6 +468,9 @@ const styles = StyleSheet.create({
   selectOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(196,149,106,0.25)', alignItems: 'flex-end', justifyContent: 'flex-start', padding: 5 },
   selectCheck: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   assignedBadge: { position: 'absolute', bottom: 5, left: 5, backgroundColor: 'rgba(250,248,245,0.92)', borderRadius: 100, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  stackBadges:  { position: 'absolute', bottom: 5, left: 5, flexDirection: 'row', gap: 2 },
+  stackBadge:   { backgroundColor: 'rgba(250,248,245,0.92)', borderRadius: 100, width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  heartBadge: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(250,248,245,0.88)', borderRadius: 100, width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   empty: { paddingTop: 60, alignItems: 'center', gap: 8, paddingHorizontal: 32 },
   emptyTitle: { fontFamily: 'InstrumentSerif-Regular', fontSize: 22, color: colors.ink },
   emptyBody: { fontFamily: 'Geist-Regular', fontSize: 14, color: colors.ink2, textAlign: 'center' },

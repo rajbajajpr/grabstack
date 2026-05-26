@@ -6,12 +6,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { Image as ExpoImage } from 'expo-image';
 import { getAllStacksWithCounts, getStackItems, createStack } from '../../services/database';
 import { colors, radius, EMOJI_OPTIONS, STACK_TEMPLATES } from '../../constants/theme';
 
 function MiniThumb({ uri }) {
   if (!uri) return <View style={{ flex: 1, height: '100%', backgroundColor: colors.cream3 }} />;
-  return <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />;
+  return <ExpoImage source={{ uri }} style={{ width: "100%", height: "100%" }} contentFit="cover" />;
 }
 
 export default function StacksScreen() {
