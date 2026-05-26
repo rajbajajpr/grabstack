@@ -1,10 +1,11 @@
 // app/preview.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, Image, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   ScrollView, Share, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   getAllStacksWithCounts, addToStack, removeFromStack,
@@ -18,27 +19,33 @@ export default function PreviewScreen() {
   const { id } = useLocalSearchParams();
   const shotId = String(id || '');
 
-  // Get shot from cache — no URI encoding issues
-  const cached = getShot(shotId);
-  const uri = cached?.uri || null;
-  const localIdentifier = cached?.localIdentifier || shotId.replace('ss-', '');
-
+  const [uri, setUri] = useState(null);
+  const [localIdentifier, setLocalIdentifier] = useState('');
   const [stacks, setStacks] = useState([]);
   const [inStacks, setInStacks] = useState([]);
   const [inWant, setInWant] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastAdded, setLastAdded] = useState(null);
+  const capturedAtRef = useRef(Date.now());
 
   useEffect(() => {
     async function load() {
       try {
-        // Ensure screenshot is in DB
+        // Read from cache — must be inside useEffect so module is ready
+        const cached = getShot(shotId);
+        if (cached?.uri) setUri(cached.uri);
+        const lid = cached?.localIdentifier || shotId.replace('ss-', '');
+        setLocalIdentifier(lid);
+        if (cached?.capturedAt) capturedAtRef.current = cached.capturedAt;
+
+        // Save to DB
         await upsertScreenshot({
           id: shotId,
-          localIdentifier,
+          localIdentifier: lid,
           capturedAt: cached?.capturedAt || Date.now(),
           filename: cached?.filename || null,
         });
+
         const [allStacks, shotStacks] = await Promise.all([
           getAllStacksWithCounts(),
           getStacksForScreenshot(shotId),
@@ -77,7 +84,7 @@ export default function PreviewScreen() {
       await setWantList(shotId, next);
     } catch (e) {
       console.error('toggleWant:', e);
-      setInWant(prev => !prev); // revert on error
+      setInWant(v => !v);
     }
   }
 
@@ -87,13 +94,12 @@ export default function PreviewScreen() {
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-      {/* Nav */}
       <View style={s.nav}>
         <TouchableOpacity onPress={goBack} activeOpacity={0.7}>
           <Text style={s.back}>← Back</Text>
         </TouchableOpacity>
         <View style={s.acts}>
-          <TouchableOpacity onPress={toggleWant} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <TouchableOpacity onPress={toggleWant} hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}>
             <Text style={s.actIcon}>{inWant ? '❤️' : '🤍'}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => Share.share({ message: 'Shared from GrabStack' })}>
@@ -102,32 +108,30 @@ export default function PreviewScreen() {
         </View>
       </View>
 
-      {/* Screenshot */}
       <View style={s.imgArea}>
         {uri ? (
           <Image
             source={{ uri }}
             style={s.imgCard}
             resizeMode="contain"
+
           />
         ) : (
           <View style={[s.imgCard, s.imgPlaceholder]}>
             <Text style={{ fontSize: 44 }}>📷</Text>
             <Text style={{ fontFamily: 'Geist-Regular', fontSize: 13, color: colors.ink3, marginTop: 8 }}>
-              Image not available
+              {loading ? 'Loading…' : 'Image unavailable'}
             </Text>
           </View>
         )}
       </View>
 
-      {/* Success */}
       {lastAdded && (
         <View style={s.successBanner}>
           <Text style={s.successText}>✓ Added to {lastAdded}</Text>
         </View>
       )}
 
-      {/* Stacks */}
       <View style={s.sheet}>
         <Text style={s.sheetLabel}>Add to stack</Text>
         {loading ? (
@@ -163,13 +167,13 @@ const s = StyleSheet.create({
   acts:    { flexDirection: 'row', gap: 20 },
   actIcon: { fontSize: 24 },
   imgArea: { flex: 1, padding: 12, paddingBottom: 8 },
-  imgCard: { flex: 1, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.cream2 },
+  imgCard: { width: '100%', height: '100%', borderRadius: radius.lg, backgroundColor: colors.cream2, overflow: 'hidden' },
   imgPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   successBanner: { marginHorizontal: 24, marginBottom: 8, backgroundColor: colors.greenBg, borderRadius: radius.pill, paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(45,106,79,0.2)' },
   successText: { fontFamily: 'Geist-Medium', fontSize: 13, color: colors.green },
   sheet:    { paddingHorizontal: 24, paddingTop: 14, paddingBottom: 20, borderTopWidth: 1, borderColor: colors.border },
   sheetLabel: { fontFamily: 'Geist-SemiBold', fontSize: 11, color: colors.ink3, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
-  noStacks:   { fontFamily: 'Geist-Regular', fontSize: 13, color: colors.ink2 },
+  noStacks: { fontFamily: 'Geist-Regular', fontSize: 13, color: colors.ink2 },
   stackBtn:     { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: colors.cream2, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border2, paddingVertical: 10, paddingHorizontal: 16 },
   stackBtnOn:   { backgroundColor: colors.ink, borderColor: colors.ink },
   stackBtnText: { fontFamily: 'Geist-Regular', fontSize: 14, color: colors.ink },

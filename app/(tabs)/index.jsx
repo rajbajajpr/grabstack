@@ -2,13 +2,14 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SectionList, TouchableOpacity,
-  ScrollView, Dimensions, RefreshControl, Image, Modal, Pressable,
+  ScrollView, Dimensions, RefreshControl, Modal, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
 import { getAllStacksWithCounts, getSetting, getStackItems, addToStack, upsertScreenshot } from '../../services/database';
 import { storeShot, clearOld } from '../../services/shotCache';
+import { Image } from 'expo-image';
 import { colors, radius } from '../../constants/theme';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -28,7 +29,12 @@ function ScreenshotCell({ shot, assignedStacks, selected, onPress, onLongPress }
       activeOpacity={0.82}
       delayLongPress={400}
     >
-      <Image source={{ uri: shot.uri }} style={styles.cellImg} resizeMode="cover" />
+      <Image
+        source={{ uri: shot.uri }}
+        style={styles.cellImg}
+        contentFit="cover"
+        recyclingKey={shot.id}
+      />
       {selected && (
         <View style={styles.selectOverlay}>
           <View style={styles.selectCheck}>

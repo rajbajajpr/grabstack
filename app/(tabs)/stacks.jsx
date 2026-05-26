@@ -73,7 +73,7 @@ export default function StacksScreen() {
 
         {/* Want list */}
         {wantList && (
-          <View style={s.wantCard}>
+          <TouchableOpacity style={s.wantCard} onPress={() => router.push({ pathname: '/stack-detail', params: { id: 'want-list' } })} activeOpacity={0.88}>
             <View style={s.wantTop}>
               <View style={s.wantLeft}>
                 <Text style={{ fontSize: 20 }}>❤️</Text>
@@ -88,7 +88,7 @@ export default function StacksScreen() {
                 </View>
               ))}
             </View>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* User stacks */}

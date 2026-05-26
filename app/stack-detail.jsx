@@ -120,8 +120,7 @@ export default function StackDetailScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={s.cell}
-              onPress={() => if(item.uri) storeShot(item); clearOld(); router.push({ pathname: '/preview', params: { id: item.id } })}
-              activeOpacity={0.82}
+onPress={() => { storeShot(item); clearOld(); router.push({ pathname: '/preview', params: { id: item.id } }); }}              activeOpacity={0.82}
             >
               {item.uri
                 ? <Image source={{ uri: item.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
