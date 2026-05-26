@@ -18,8 +18,12 @@ import { storeShot } from '../../services/shotCache';
 import { colors, radius } from '../../constants/theme';
 
 const BATCH_BY_TIER = { free: 3, starter: 10, pro: 20 };
-// API key lives here — never exposed to users
-const API_KEY = process.env.ANTHROPIC_API_KEY || process.env.EXPO_PUBLIC_ANTHROPIC_KEY || '';
+import Constants from 'expo-constants';
+
+// API key read from app.json extra or environment
+const API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY
+  || Constants.expoConfig?.extra?.anthropicKey
+  || '';
 
 async function uriToBase64(uri) {
   try {
@@ -69,8 +73,9 @@ Rules: match existing stacks when possible, suggest new only when needed, short 
     }),
   });
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error?.message || `API error ${response.status}`);
+  const rawText = await response.text();
+  if (!response.ok) throw new Error(`API error ${response.status}: ${rawText.slice(0, 100)}`);
+  const data = JSON.parse(rawText);
   const text = data.content?.[0]?.text || '[]';
   return JSON.parse(text.replace(/```json|```/g, '').trim());
 }
@@ -221,14 +226,6 @@ export default function AiSortScreen() {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <Text style={s.title}>AI Sort</Text>
-        <View style={s.usagePill}>
-          <Text style={s.usageText}>
-            {usage.tier === 'pro'
-              ? '✦ Unlimited'
-              : `${remaining === Infinity ? '∞' : remaining} of ${limit} analyses left`
-            }
-          </Text>
-        </View>
       </View>
       <Text style={s.sub}>Let Claude look at your screenshots and sort them automatically</Text>
 
@@ -284,9 +281,6 @@ export default function AiSortScreen() {
                 activeOpacity={0.88}
               >
                 {analysing ? <ActivityIndicator color={colors.cream} /> : <Text style={s.applyBtnText}>Apply {accepted.size} group{accepted.size !== 1 ? 's' : ''} →</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity style={s.rerunBtn} onPress={runAnalysis} activeOpacity={0.8}>
-                <Text style={s.rerunBtnText}>Re-analyse</Text>
               </TouchableOpacity>
             </View>
           </>
